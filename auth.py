@@ -1,23 +1,11 @@
 import streamlit as st
 from conexao import supabase, safe_query
 
-# =========================
-# 🧠 INICIALIZAR SESSÃO
-# =========================
 def init_session():
-    if "logado" not in st.session_state:
-        st.session_state.logado = False
+    st.session_state.setdefault("logado", False)
+    st.session_state.setdefault("usuario", None)
+    st.session_state.setdefault("tipo", None)
 
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = None
-
-    if "tipo" not in st.session_state:
-        st.session_state.tipo = None
-
-
-# =========================
-# 🔐 LOGIN
-# =========================
 def login(username, senha):
     try:
         res = safe_query(lambda: supabase.table("usuarios")
@@ -39,19 +27,15 @@ def login(username, senha):
             st.session_state.logado = True
             st.session_state.usuario = user_db["nome"]
             st.session_state.tipo = user_db["tipo"]
-
             return True
 
         return False
 
     except Exception as e:
-        st.error(f"Erro no login: {e}")
+        st.error(f"Erro login: {e}")
         return False
 
 
-# =========================
-# 🔄 RESTAURAR SESSÃO (Cloud-safe)
-# =========================
 def restaurar_sessao():
     try:
         user = supabase.auth.get_user()
@@ -66,32 +50,16 @@ def restaurar_sessao():
                          .eq("email", email)
                          .execute())
 
-        if not res or not res.data:
-            return
-
-        usuario_db = res.data[0]
-
-        st.session_state.logado = True
-        st.session_state.usuario = usuario_db["nome"]
-        st.session_state.tipo = usuario_db["tipo"]
+        if res and res.data:
+            u = res.data[0]
+            st.session_state.logado = True
+            st.session_state.usuario = u["nome"]
+            st.session_state.tipo = u["tipo"]
 
     except:
         pass
 
 
-# =========================
-# 🔁 MANTER SESSÃO
-# =========================
-def manter_sessao():
-    try:
-        supabase.auth.get_user()
-    except:
-        logout()
-
-
-# =========================
-# 🚪 LOGOUT
-# =========================
 def logout():
     try:
         supabase.auth.sign_out()
@@ -100,3 +68,15 @@ def logout():
 
     st.session_state.clear()
     st.rerun()
+
+
+def require_login():
+    if not st.session_state.get("logado"):
+        st.warning("🔐 Faça login")
+        st.stop()
+
+
+def require_role(tipos):
+    if st.session_state.get("tipo") not in tipos:
+        st.warning("🚫 Acesso restrito")
+        st.stop()
