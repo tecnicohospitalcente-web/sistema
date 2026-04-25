@@ -8,7 +8,6 @@ localStorage = LocalStorage()
 # 🧠 INICIALIZAR SESSÃO
 # =========================
 def init_session():
-
     st.session_state.setdefault("logado", False)
     st.session_state.setdefault("usuario", None)
     st.session_state.setdefault("tipo", None)
@@ -20,48 +19,38 @@ def init_session():
 # =========================
 def login(username, senha):
 
-    try:
-        # 🔎 busca usuário
-        res = safe_query(lambda: supabase.table("usuarios")
-                         .select("*")
-                         .eq("username", username)
-                         .execute())
+    res = safe_query(lambda: supabase.table("usuarios")
+                     .select("*")
+                     .eq("username", username)
+                     .execute())
 
-        if not res or not res.data:
-            st.warning("Usuário não encontrado")
-            return False
-
-        user_db = res.data[0]
-
-        # 🔐 login no auth
-        auth = supabase.auth.sign_in_with_password({
-            "email": user_db["email"],
-            "password": senha
-        })
-
-        if auth.session:
-
-            session_data = {
-                "access_token": auth.session.access_token,
-                "refresh_token": auth.session.refresh_token
-            }
-
-            # 💾 salva sessão
-            st.session_state.logado = True
-            st.session_state.usuario = user_db.get("nome")
-            st.session_state.tipo = user_db.get("tipo")
-            st.session_state.session = session_data
-
-            localStorage.setItem("session", session_data)
-
-            return True
-
-        st.error("Senha incorreta")
+    if not res or not res.data:
         return False
 
-    except Exception as e:
-        st.error(f"Erro no login: {e}")
-        return False
+    user_db = res.data[0]
+
+    auth = supabase.auth.sign_in_with_password({
+        "email": user_db["email"],
+        "password": senha
+    })
+
+    if auth.session:
+
+        session_data = {
+            "access_token": auth.session.access_token,
+            "refresh_token": auth.session.refresh_token
+        }
+
+        st.session_state.logado = True
+        st.session_state.usuario = user_db.get("nome")
+        st.session_state.tipo = user_db.get("tipo")
+        st.session_state.session = session_data
+
+        localStorage.setItem("session", session_data)
+
+        return True
+
+    return False
 
 
 # =========================
@@ -83,7 +72,7 @@ def restaurar_sessao():
         user = supabase.auth.get_user()
 
         if not user.user:
-            raise Exception("Sessão inválida")
+            raise Exception()
 
         email = user.user.email
 
@@ -93,7 +82,7 @@ def restaurar_sessao():
                          .execute())
 
         if not res or not res.data:
-            raise Exception("Usuário não encontrado")
+            raise Exception()
 
         usuario_db = res.data[0]
 
@@ -102,12 +91,12 @@ def restaurar_sessao():
         st.session_state.tipo = usuario_db.get("tipo")
         st.session_state.session = saved
 
-    except Exception:
+    except:
         logout()
 
 
 # =========================
-# 🔁 MANTER SESSÃO VIVA
+# 🔁 MANTER SESSÃO
 # =========================
 def manter_sessao():
 
@@ -119,8 +108,7 @@ def manter_sessao():
             st.session_state.session["access_token"],
             st.session_state.session["refresh_token"]
         )
-
-    except Exception:
+    except:
         logout()
 
 
@@ -136,23 +124,3 @@ def logout():
 
     st.session_state.clear()
     st.rerun()
-
-
-# =========================
-# 🔐 PROTEGER TELA
-# =========================
-def require_login():
-
-    if not st.session_state.get("logado"):
-        st.warning("🔐 Faça login para continuar")
-        st.stop()
-
-
-# =========================
-# 🔒 PERMISSÃO
-# =========================
-def require_role(tipos):
-
-    if st.session_state.get("tipo") not in tipos:
-        st.warning("🚫 Acesso restrito")
-        st.stop()
