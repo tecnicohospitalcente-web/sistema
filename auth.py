@@ -1,8 +1,5 @@
 import streamlit as st
 from conexao import supabase, safe_query
-from streamlit_local_storage import LocalStorage
-
-localStorage = LocalStorage()
 
 # =========================
 # 🧠 INICIALIZAR SESSÃO
@@ -16,9 +13,6 @@ def init_session():
 
     if "tipo" not in st.session_state:
         st.session_state.tipo = None
-
-    if "session" not in st.session_state:
-        st.session_state.session = None
 
 
 # =========================
@@ -41,19 +35,10 @@ def login(username, senha):
             "password": senha
         })
 
-        if auth.session:
-
-            session_data = {
-                "access_token": auth.session.access_token,
-                "refresh_token": auth.session.refresh_token
-            }
-
+        if auth.user:
             st.session_state.logado = True
             st.session_state.usuario = user_db["nome"]
             st.session_state.tipo = user_db["tipo"]
-            st.session_state.session = session_data
-
-            localStorage.setItem("session", session_data)
 
             return True
 
@@ -65,24 +50,14 @@ def login(username, senha):
 
 
 # =========================
-# 🔄 RESTAURAR SESSÃO
+# 🔄 RESTAURAR SESSÃO (Cloud-safe)
 # =========================
 def restaurar_sessao():
     try:
-        saved = localStorage.getItem("session")
-
-        if not saved:
-            return
-
-        supabase.auth.set_session(
-            saved["access_token"],
-            saved["refresh_token"]
-        )
-
         user = supabase.auth.get_user()
 
-        if not user.user:
-            raise Exception("Sessão inválida")
+        if not user or not user.user:
+            return
 
         email = user.user.email
 
@@ -92,31 +67,26 @@ def restaurar_sessao():
                          .execute())
 
         if not res or not res.data:
-            raise Exception("Usuário não encontrado")
+            return
 
         usuario_db = res.data[0]
 
         st.session_state.logado = True
         st.session_state.usuario = usuario_db["nome"]
         st.session_state.tipo = usuario_db["tipo"]
-        st.session_state.session = saved
 
     except:
-        logout()
+        pass
 
 
 # =========================
 # 🔁 MANTER SESSÃO
 # =========================
 def manter_sessao():
-    if st.session_state.get("session"):
-        try:
-            supabase.auth.set_session(
-                st.session_state.session["access_token"],
-                st.session_state.session["refresh_token"]
-            )
-        except:
-            logout()
+    try:
+        supabase.auth.get_user()
+    except:
+        logout()
 
 
 # =========================
@@ -124,7 +94,7 @@ def manter_sessao():
 # =========================
 def logout():
     try:
-        localStorage.deleteItem("session")
+        supabase.auth.sign_out()
     except:
         pass
 
