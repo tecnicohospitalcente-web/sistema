@@ -1,35 +1,24 @@
 from supabase import create_client
 import streamlit as st
 
-# =========================
-# 🔐 CONEXÃO SEGURA
-# =========================
 @st.cache_resource
 def get_supabase():
-    return create_client(
-        st.secrets["SUPABASE_URL"],
-        st.secrets["SUPABASE_KEY"]
-    )
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
 supabase = get_supabase()
 
-# =========================
-# 🛡️ QUERY SEGURA (ANTI-ERRO)
-# =========================
-def safe_query(func, tentativas=2):
 
+def safe_query(func, tentativas=3):
     for i in range(tentativas):
         try:
             return func()
-
         except Exception as e:
-
-            # 🔥 tenta reconectar automaticamente
+            print(f"Erro tentativa {i+1}: {e}")
             try:
                 supabase.auth.get_user()
             except:
                 pass
-
             if i == tentativas - 1:
-                print("Erro Supabase:", e)
                 return None

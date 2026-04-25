@@ -1,163 +1,90 @@
 import streamlit as st
-from conexao import supabase
-from streamlit_local_storage import LocalStorage
-
-# módulos
-from modulos import financeiro, dashboard, rh, estoque, convenios, usuarios
-
-st.set_page_config(layout="wide")
-
-localStorage = LocalStorage()
+from auth import init_session, restaurar_sessao, manter_sessao, login, logout
+from modulos import dashboard, financeiro, rh, estoque, convenios, usuarios
 
 # =========================
-# 🧠 ESTADO INICIAL
+# ⚙️ CONFIG APP
 # =========================
-def init_state():
-    if "logado" not in st.session_state:
-        st.session_state.logado = False
-
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = None
-
-    if "tipo" not in st.session_state:
-        st.session_state.tipo = None
-
-    if "session" not in st.session_state:
-        st.session_state.session = None
-
-init_state()
+st.set_page_config(
+    page_title="Hospital Centenário",
+    page_icon="assets/icon_128.png",
+    layout="wide"
+)
 
 # =========================
-# 🧹 LOGOUT SEGURO
+# 🎨 ESTILO GLOBAL (SaaS)
 # =========================
-def logout():
-    keys = ["logado", "usuario", "tipo", "session"]
-
-    for k in keys:
-        if k in st.session_state:
-            del st.session_state[k]
-
-    try:
-        if localStorage.getItem("session"):
-            localStorage.deleteItem("session")
-    except:
-        pass
-
-    st.rerun()
-
-# =========================
-# 🔄 RESTAURAR SESSÃO
-# =========================
-def restaurar_sessao():
-
-    if st.session_state.logado:
-        return
-
-    saved = localStorage.getItem("session")
-
-    if not saved:
-        return
-
-    try:
-        supabase.auth.set_session(
-            saved["access_token"],
-            saved["refresh_token"]
-        )
-
-        user = supabase.auth.get_user()
-
-        if user.user:
-            email = user.user.email
-
-            res = supabase.table("usuarios").select("*").eq("email", email).execute()
-
-            if res.data:
-                u = res.data[0]
-
-                st.session_state.logado = True
-                st.session_state.usuario = u["nome"]
-                st.session_state.tipo = u["tipo"]
-                st.session_state.session = saved
-
-    except:
-        try:
-            localStorage.deleteItem("session")
-        except:
-            pass
-
-restaurar_sessao()
+st.markdown("""
+<style>
+body {
+    background-color: #0f172a;
+}
+.block-container {
+    padding-top: 2rem;
+}
+.stButton>button {
+    border-radius: 8px;
+    height: 45px;
+    border: 1px solid #374151;
+    background-color: #111827;
+    color: white;
+}
+.stButton>button:hover {
+    background-color: #00A86B;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
-# 🔐 LOGIN
+# 🧠 SESSÃO
 # =========================
-def login(username, senha):
+init_session()
 
-    try:
-        res = supabase.table("usuarios").select("*").eq("username", username).execute()
+if not st.session_state.logado:
+    restaurar_sessao()
 
-        if not res.data:
-            return None
-
-        user_db = res.data[0]
-
-        auth = supabase.auth.sign_in_with_password({
-            "email": user_db["email"],
-            "password": senha
-        })
-
-        if auth.session:
-
-            session_data = {
-                "access_token": auth.session.access_token,
-                "refresh_token": auth.session.refresh_token
-            }
-
-            st.session_state.logado = True
-            st.session_state.usuario = user_db["nome"]
-            st.session_state.tipo = user_db["tipo"]
-            st.session_state.session = session_data
-
-            localStorage.setItem("session", session_data)
-
-            return user_db
-
-    except Exception as e:
-        st.error(f"Erro no login: {e}")
-
-    return None
+manter_sessao()
 
 # =========================
-# 🔐 TELA LOGIN
+# 🔐 LOGIN (PROFISSIONAL)
 # =========================
 if not st.session_state.logado:
 
-    st.title("🔐 Login do Sistema")
+    col1, col2, col3 = st.columns([2,3,2])
 
-    user = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
+    with col2:
+        st.image("assets/logo_transparent.png", width=220)
 
-    if st.button("Entrar"):
+        st.markdown("""
+        <h3 style='text-align:center;'>Sistema Hospitalar</h3>
+        <p style='text-align:center; color:gray;'>Acesso restrito</p>
+        """, unsafe_allow_html=True)
 
-        if login(user, senha):
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos")
+        user = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+
+        if st.button("Entrar", use_container_width=True):
+            if login(user, senha):
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos")
 
     st.stop()
 
 # =========================
-# 🎨 NAVBAR
+# 🔝 NAVBAR
 # =========================
-col1, col2, col3 = st.columns([1, 6, 2])
+col1, col2, col3 = st.columns([2,6,2])
 
 with col1:
-    try:
-        st.image("logo.png", width=70)
-    except:
-        st.write("🏥")
+    st.image("assets/logo_transparent.png", width=160)
 
 with col2:
-    st.markdown("### 🏥 Sistema Hospitalar SaaS")
+    st.markdown("""
+    <h2 style='margin-bottom:0;'>Hospital Centenário</h2>
+    <p style='color:gray; margin-top:0;'>Sistema Administrativo</p>
+    """, unsafe_allow_html=True)
 
 with col3:
     st.markdown(f"👤 **{st.session_state.usuario}**")
@@ -168,36 +95,36 @@ with col3:
 st.markdown("---")
 
 # =========================
-# 📋 MENU
+# 📋 MENU (TOP SAAS)
 # =========================
 if "menu" not in st.session_state:
     st.session_state.menu = "Dashboard"
 
 tipo = st.session_state.tipo
 
-colunas = st.columns(6)
+col = st.columns(6)
 
-if colunas[0].button("📊 Dashboard"):
+if col[0].button("📊 Dashboard"):
     st.session_state.menu = "Dashboard"
 
-if tipo in ["admin", "financeiro"]:
-    if colunas[1].button("💰 Financeiro"):
+if tipo in ["admin","financeiro"]:
+    if col[1].button("💰 Financeiro"):
         st.session_state.menu = "Financeiro"
 
-if tipo in ["admin", "rh"]:
-    if colunas[2].button("👨‍💼 RH"):
+if tipo in ["admin","rh"]:
+    if col[2].button("👨‍💼 RH"):
         st.session_state.menu = "RH"
 
-if tipo in ["admin", "estoque"]:
-    if colunas[3].button("📦 Estoque"):
+if tipo in ["admin","estoque"]:
+    if col[3].button("📦 Estoque"):
         st.session_state.menu = "Estoque"
 
 if tipo == "admin":
-    if colunas[4].button("🧾 Convênios"):
+    if col[4].button("🧾 Convênios"):
         st.session_state.menu = "Convênios"
 
 if tipo == "admin":
-    if colunas[5].button("👥 Usuários"):
+    if col[5].button("👥 Usuários"):
         st.session_state.menu = "Usuarios"
 
 menu = st.session_state.menu
