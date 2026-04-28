@@ -1,5 +1,5 @@
 import streamlit as st
-from auth import init_session, restaurar_sessao, manter_sessao, login, logout
+import auth  # 🔥 IMPORT ESTÁVEL (ANTI-BUG)
 from modulos import internacao, dashboard, financeiro, rh, estoque, convenios, usuarios
 
 # =========================
@@ -89,19 +89,19 @@ div[role="radiogroup"] input:checked + div {
 """, unsafe_allow_html=True)
 
 # =========================
-# 🧠 SESSÃO
+# 🧠 SESSÃO (ESTÁVEL)
 # =========================
-init_session()
+auth.init_session()
 
-if not st.session_state.logado:
-    restaurar_sessao()
+if not st.session_state.get("logado"):
+    auth.restaurar_sessao()
 
-manter_sessao()
+auth.manter_sessao()
 
 # =========================
 # 🔐 LOGIN
 # =========================
-if not st.session_state.logado:
+if not st.session_state.get("logado"):
 
     col1, col2, col3 = st.columns([2,3,2])
 
@@ -114,7 +114,7 @@ if not st.session_state.logado:
         senha = st.text_input("Senha", type="password")
 
         if st.button("Entrar", use_container_width=True):
-            if login(user, senha):
+            if auth.login(user, senha):
                 st.rerun()
             else:
                 st.error("Usuário ou senha inválidos")
@@ -136,20 +136,19 @@ with col2:
     """, unsafe_allow_html=True)
 
 with col3:
-    st.write(f"👤 {st.session_state.usuario}")
+    st.write(f"👤 {st.session_state.get('usuario')}")
     if st.button("Sair"):
-        logout()
+        auth.logout()
 
 st.markdown("---")
 
 # =========================
-# 📋 MENU (DASHBOARD ÚLTIMO)
+# 📋 MENU (ORDEM PROFISSIONAL)
 # =========================
-tipo = st.session_state.tipo
+tipo = st.session_state.get("tipo")
 
 opcoes = []
 
-# ORDEM CORRETA (SISTEMA REAL)
 if tipo in ["admin","financeiro"]:
     opcoes.append("💰 Financeiro")
 
@@ -163,7 +162,7 @@ if tipo == "admin":
     opcoes.append("🧾 Convênios")
     opcoes.append("👥 Usuários")
 
-# 🔥 NOVO MÓDULO
+# 🔥 INTERNAÇÃO
 opcoes.append("🏥 Internação")
 
 # 🔥 DASHBOARD POR ÚLTIMO
@@ -174,7 +173,7 @@ menu = st.radio("", opcoes, horizontal=True)
 st.markdown("---")
 
 # =========================
-# 📄 ROTAS COM ANIMAÇÃO
+# 📄 ROTAS (COM ANIMAÇÃO)
 # =========================
 container = st.container()
 container.markdown("<div class='fade'>", unsafe_allow_html=True)
