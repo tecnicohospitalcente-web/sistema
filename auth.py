@@ -1,20 +1,24 @@
 import streamlit as st
 from conexao import supabase, safe_query
+from datetime import datetime, timedelta
+
+# ⏱ tempo de sessão (minutos)
+SESSION_TIMEOUT = 30
+
 
 # =========================
-# 🧠 INIT SESSION (SEMPRE EXISTE)
+# 🧠 INIT SESSION
 # =========================
 def init_session():
     defaults = {
         "logado": False,
         "usuario": None,
         "tipo": None,
-        "session": None
+        "last_activity": None
     }
 
     for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+        st.session_state.setdefault(k, v)
 
 
 # =========================
@@ -37,19 +41,14 @@ def login(username, senha):
             "password": senha
         })
 
-        if not auth or not auth.session:
+        if not auth or not auth.user:
             return False
 
-        # 🔐 salva somente tokens (evita erro JSON)
-        session_data = {
-            "access_token": auth.session.access_token,
-            "refresh_token": auth.session.refresh_token
-        }
-
+        # 🔥 salva sessão leve
         st.session_state["logado"] = True
         st.session_state["usuario"] = user_db["nome"]
         st.session_state["tipo"] = user_db["tipo"]
-        st.session_state["session"] = session_data
+        st.session_state["last_activity"] = datetime.now()
 
         return True
 
@@ -59,11 +58,13 @@ def login(username, senha):
 
 
 # =========================
-# 🔄 RESTAURAR SESSÃO (SEM LOCAL STORAGE BUG)
+# 🔄 RESTAURAR SESSÃO
 # =========================
 def restaurar_sessao():
+    if st.session_state.get("logado"):
+        return
+
     try:
-        # 🔥 usa sessão do próprio Supabase
         user = supabase.auth.get_user()
 
         if not user or not user.user:
@@ -72,7 +73,7 @@ def restaurar_sessao():
         email = user.user.email
 
         res = safe_query(lambda: supabase.table("usuarios")
-                         .select("*")
+                         .select("nome,tipo,email")
                          .eq("email", email)
                          .execute())
 
@@ -82,23 +83,29 @@ def restaurar_sessao():
             st.session_state["logado"] = True
             st.session_state["usuario"] = u["nome"]
             st.session_state["tipo"] = u["tipo"]
+            st.session_state["last_activity"] = datetime.now()
 
-    except Exception as e:
-        print("Erro restaurar:", e)
+    except:
+        pass
 
 
 # =========================
-# 🔁 MANTER SESSÃO
+# 🔁 MANTER SESSÃO + AUTO LOGOUT
 # =========================
 def manter_sessao():
     try:
-        user = supabase.auth.get_user()
-
-        if user and user.user:
+        if not st.session_state.get("logado"):
             return
 
-        # 🔥 se perdeu sessão → desloga
-        logout()
+        agora = datetime.now()
+        ultima = st.session_state.get("last_activity")
+
+        if ultima and (agora - ultima > timedelta(minutes=SESSION_TIMEOUT)):
+            st.warning("Sessão expirada 🔐")
+            logout()
+
+        # 🔥 atualiza atividade
+        st.session_state["last_activity"] = agora
 
     except:
         logout()
@@ -113,9 +120,7 @@ def logout():
     except:
         pass
 
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-
+    st.session_state.clear()
     st.rerun()
 
 
