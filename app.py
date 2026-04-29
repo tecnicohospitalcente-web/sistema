@@ -48,10 +48,29 @@ st.set_page_config(
 # =========================
 st.markdown("""
 <style>
-.main { background-color: #0f172a; }
-h1,h2,h3,h4,p,span { color: white; }
 
-.stButton>button {
+/* 🔥 CORRIGE FUNDO GLOBAL */
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #0f172a !important;
+}
+
+/* 🔥 CONTAINER PRINCIPAL */
+[data-testid="stAppViewContainer"] > .main {
+    background-color: #0f172a;
+}
+
+/* 🔥 REMOVE FUNDO BRANCO */
+section[data-testid="stSidebar"] {
+    background-color: #020617 !important;
+}
+
+/* 🔥 TEXTO GLOBAL */
+h1, h2, h3, h4, p, span, label {
+    color: white !important;
+}
+
+/* 🔥 BOTÕES */
+.stButton > button {
     width: 100%;
     border-radius: 10px;
     height: 42px;
@@ -60,11 +79,13 @@ h1,h2,h3,h4,p,span { color: white; }
     border: 1px solid #1f2937;
     transition: 0.2s;
 }
-.stButton>button:hover {
+
+.stButton > button:hover {
     background-color: #1f2937;
     border-color: #00A86B;
 }
 
+/* 🔥 RADIO MENU */
 div[role="radiogroup"] {
     display: flex;
     gap: 8px;
@@ -80,6 +101,30 @@ div[role="radiogroup"] label {
 div[role="radiogroup"] input:checked + div {
     background-color: #00A86B !important;
     font-weight: bold;
+}
+
+/* 🔥 CARDS DASHBOARD */
+.card {
+    background: #111827;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #1f2937;
+    text-align: center;
+}
+
+/* 🔥 REMOVE ESPAÇOS BRANCOS */
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+/* 🔥 SCROLL */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-thumb {
+    background: #1f2937;
+    border-radius: 10px;
 }
 
 </style>
