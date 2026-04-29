@@ -3,7 +3,7 @@ import pandas as pd
 from conexao import supabase, safe_query
 
 # =========================
-# 🔄 CARREGAR DADOS (RÁPIDO)
+# ⚡ CACHE (PERFORMANCE)
 # =========================
 @st.cache_data(ttl=5)
 def carregar_leitos():
@@ -28,7 +28,6 @@ def carregar_leitos():
     internacoes = internacoes_res.data if internacoes_res else []
     pacientes = pacientes_res.data if pacientes_res else []
 
-    # 🔥 mapas rápidos (SEM loop pesado)
     pacientes_map = {p["id"]: p["nome"] for p in pacientes}
     intern_map = {i["leito_id"]: i for i in internacoes}
 
@@ -45,9 +44,6 @@ def carregar_leitos():
     return pd.DataFrame(leitos)
 
 
-# =========================
-# 👤 PACIENTES
-# =========================
 @st.cache_data(ttl=10)
 def carregar_pacientes():
     res = safe_query(lambda: supabase.table("pacientes")
@@ -55,6 +51,40 @@ def carregar_pacientes():
                      .execute())
 
     return pd.DataFrame(res.data or [])
+
+
+# =========================
+# 👤 CADASTRO PACIENTE
+# =========================
+def cadastrar_paciente():
+
+    st.subheader("👤 Cadastro de Paciente")
+
+    nome = st.text_input("Nome")
+    cpf = st.text_input("CPF")
+    nascimento = st.date_input("Data de nascimento")
+    telefone = st.text_input("Telefone")
+
+    if st.button("Salvar paciente"):
+
+        if not nome:
+            st.warning("Nome obrigatório")
+            return
+
+        try:
+            supabase.table("pacientes").insert({
+                "nome": nome,
+                "cpf": cpf,
+                "data_nascimento": str(nascimento),
+                "telefone": telefone
+            }).execute()
+
+            st.success("Paciente cadastrado")
+            st.cache_data.clear()
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Erro: {e}")
 
 
 # =========================
@@ -86,13 +116,41 @@ def dar_alta(leito_id):
 
 
 # =========================
-# 🧱 MAPA VISUAL
+# 🧠 PRIORIDADE
+# =========================
+def escolher_leito(df, prioridade):
+
+    livres = df[df["status"] == "livre"]
+
+    if livres.empty:
+        return None
+
+    if prioridade == "Emergência":
+        return livres.iloc[0]
+
+    elif prioridade == "Urgente":
+        return livres.iloc[len(livres)//2]
+
+    else:
+        return livres.iloc[-1]
+
+
+# =========================
+# 🗺️ MAPA DE LEITOS
 # =========================
 def mapa_leitos(df):
 
-    st.markdown("### 🏥 Mapa de Leitos")
+    st.markdown("### 🗺️ Mapa de Leitos")
 
-    cols = st.columns(5)
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total", len(df))
+    col2.metric("Ocupados", len(df[df["status"] == "ocupado"]))
+    col3.metric("Disponíveis", len(df[df["status"] == "livre"]))
+
+    st.markdown("---")
+
+    cols = st.columns(6)
 
     for i, row in df.iterrows():
 
@@ -104,76 +162,125 @@ def mapa_leitos(df):
             "limpeza": "#f59e0b"
         }.get(status, "#374151")
 
-        with cols[i % 5]:
+        with cols[i % 6]:
 
             st.markdown(f"""
             <div style="
                 background:{cor};
-                padding:18px;
+                padding:15px;
                 border-radius:10px;
                 text-align:center;
                 color:white;
-                margin-bottom:10px;
             ">
-                <b>Leito {row['numero']}</b><br>
-                {status.upper()}
+                <b>🛏️ {row['numero']}</b><br>
+                {status.upper()}<br>
+                <small>{row.get('paciente') or ''}</small>
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button("Selecionar", key=row["id"]):
+            if st.button("Selecionar", key=f"leito_{row['id']}"):
                 st.session_state.leito_sel = row.to_dict()
 
 
 # =========================
-# 🖥️ TELA
+# ⚙️ PAINEL LEITO
+# =========================
+def painel_leito():
+
+    leito = st.session_state.get("leito_sel")
+
+    if not leito:
+        return
+
+    st.markdown("---")
+    st.subheader(f"Leito {leito['numero']}")
+
+    if leito["status"] == "ocupado":
+
+        if st.button("Dar alta"):
+            dar_alta(leito["id"])
+            st.success("Alta realizada")
+            st.rerun()
+
+    elif leito["status"] == "livre":
+
+        st.success("Disponível")
+
+    elif leito["status"] == "limpeza":
+
+        if st.button("Liberar"):
+            supabase.table("leitos").update({
+                "status": "livre"
+            }).eq("id", leito["id"]).execute()
+
+            st.success("Liberado")
+            st.rerun()
+
+
+# =========================
+# 🖥️ TELA PRINCIPAL
 # =========================
 def tela():
 
-    st.title("🏥 Internação")
+    st.title("🏥 Internação / Atendimento")
 
     df_leitos = carregar_leitos()
     df_pacientes = carregar_pacientes()
 
-    if df_leitos.empty:
-        st.warning("Nenhum leito cadastrado")
-        return
+    aba1, aba2, aba3 = st.tabs([
+        "👤 Pacientes",
+        "🩺 Atendimento",
+        "🗺️ Mapa de Leitos"
+    ])
 
-    mapa_leitos(df_leitos)
+    # 👤 PACIENTE
+    with aba1:
+        cadastrar_paciente()
 
-    st.markdown("---")
+    # 🩺 ATENDIMENTO
+    with aba2:
 
-    leito = st.session_state.get("leito_sel")
+        if df_pacientes.empty:
+            st.warning("Cadastre um paciente")
+            return
 
-    if leito:
+        paciente = st.selectbox("Paciente", df_pacientes["nome"])
+        paciente_id = df_pacientes[df_pacientes["nome"] == paciente]["id"].values[0]
 
-        st.subheader(f"Leito {leito['numero']}")
+        tipo = st.radio("Tipo", ["Consulta", "Internação"])
 
-        if leito["status"] == "livre":
+        if tipo == "Consulta":
 
-            if df_pacientes.empty:
-                st.warning("Nenhum paciente cadastrado")
-                return
+            if st.button("Registrar consulta"):
 
-            paciente_nome = st.selectbox(
-                "Selecionar paciente",
-                df_pacientes["nome"]
+                supabase.table("consultas").insert({
+                    "paciente_id": paciente_id,
+                    "status": "finalizado"
+                }).execute()
+
+                st.success("Consulta registrada")
+
+        else:
+
+            prioridade = st.selectbox(
+                "Prioridade",
+                ["Eletivo", "Urgente", "Emergência"]
             )
 
-            if st.button("Internar"):
+            if st.button("Internar automático"):
 
-                paciente_id = df_pacientes[
-                    df_pacientes["nome"] == paciente_nome
-                ]["id"].values[0]
+                leito = escolher_leito(df_leitos, prioridade)
+
+                if leito is None:
+                    st.error("Sem leitos")
+                    return
 
                 internar(paciente_id, leito["id"])
-                st.success("Paciente internado")
+
+                st.success(f"Internado no leito {leito['numero']}")
                 st.rerun()
 
-        elif leito["status"] == "ocupado":
-
-            st.info(f"Paciente: {leito.get('paciente', '---')}")
-
-            if st.button("Dar alta"):
-                dar_alta(leito["id"])
-                st.success("Alta realizada")
-                st.rerun()
+    # 🗺️ MAPA (POR ÚLTIMO)
+    with aba3:
+        mapa_leitos(df_leitos)
+        painel_leito()
