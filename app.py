@@ -49,82 +49,117 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* 🔥 CORRIGE FUNDO GLOBAL */
+/* ===== FUNDO GERAL ===== */
 html, body, [data-testid="stAppViewContainer"] {
-    background-color: #0f172a !important;
-}
-
-/* 🔥 CONTAINER PRINCIPAL */
-[data-testid="stAppViewContainer"] > .main {
     background-color: #0f172a;
 }
 
-/* 🔥 REMOVE FUNDO BRANCO */
+/* REMOVE FUNDO BRANCO DO TOPO */
+header[data-testid="stHeader"] {
+    background: transparent;
+}
+
+/* REMOVE FUNDO BRANCO LATERAL */
 section[data-testid="stSidebar"] {
-    background-color: #020617 !important;
+    background-color: #020617;
 }
 
-/* 🔥 TEXTO GLOBAL */
-h1, h2, h3, h4, p, span, label {
-    color: white !important;
+/* ===== CONTAINER PRINCIPAL ===== */
+.main {
+    background-color: #0f172a;
 }
 
-/* 🔥 BOTÕES */
-.stButton > button {
+/* ===== TEXTOS ===== */
+h1, h2, h3, h4, h5, h6, p, span, label {
+    color: #e5e7eb !important;
+}
+
+/* ===== NAVBAR ===== */
+.navbar {
+    background: #020617;
+    padding: 12px 20px;
+    border-radius: 12px;
+    border: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* ===== CARDS ===== */
+.card {
+    background: linear-gradient(145deg, #111827, #1f2937);
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid #1f2937;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+/* ===== BOTÕES ===== */
+.stButton>button {
     width: 100%;
     border-radius: 10px;
     height: 42px;
     background-color: #111827;
     color: white;
     border: 1px solid #1f2937;
-    transition: 0.2s;
+    transition: all 0.2s ease;
 }
 
-.stButton > button:hover {
+.stButton>button:hover {
     background-color: #1f2937;
     border-color: #00A86B;
+    transform: translateY(-1px);
 }
 
-/* 🔥 RADIO MENU */
+/* ===== MENU ===== */
 div[role="radiogroup"] {
     display: flex;
-    gap: 8px;
+    gap: 10px;
 }
 
 div[role="radiogroup"] label {
     background: #111827;
     border: 1px solid #1f2937;
-    padding: 10px;
+    padding: 10px 16px;
     border-radius: 10px;
+    cursor: pointer;
+    transition: 0.2s;
 }
 
+div[role="radiogroup"] label:hover {
+    background: #1f2937;
+}
+
+/* ITEM ATIVO */
 div[role="radiogroup"] input:checked + div {
-    background-color: #00A86B !important;
+    background: linear-gradient(90deg, #00A86B, #059669);
+    border: none;
     font-weight: bold;
 }
 
-/* 🔥 CARDS DASHBOARD */
-.card {
-    background: #111827;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #1f2937;
-    text-align: center;
+/* ===== INPUTS ===== */
+input, textarea, select {
+    background-color: #020617 !important;
+    color: white !important;
+    border: 1px solid #1f2937 !important;
 }
 
-/* 🔥 REMOVE ESPAÇOS BRANCOS */
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-}
-
-/* 🔥 SCROLL */
+/* ===== SCROLL ===== */
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
 }
 ::-webkit-scrollbar-thumb {
     background: #1f2937;
     border-radius: 10px;
+}
+
+/* ===== ANIMAÇÃO ===== */
+.fade {
+    animation: fadeIn 0.25s ease-in;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 </style>
@@ -164,19 +199,26 @@ if not st.session_state.get("logado"):
 # =========================
 # 🔝 NAVBAR
 # =========================
-col1, col2, col3 = st.columns([2,6,2])
+col1, col2, col3 = st.columns([1,6,2])
 
 with col1:
-    st.image("assets/logo_transparent.png", width=140)
+    st.image("assets/logo_transparent.png", width=120)
 
 with col2:
-    st.markdown("## Hospital Centenário")
+    st.markdown("""
+    <div class='navbar'>
+        <div>
+            <h3 style='margin:0;'>Hospital Centenário</h3>
+            <small style='color:gray;'>Sistema Hospitalar Integrado</small>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col3:
     st.write(f"👤 {st.session_state.get('usuario')}")
     if st.button("Sair"):
         auth.logout()
-
+        
 st.markdown("---")
 
 # =========================
