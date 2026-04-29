@@ -1,194 +1,174 @@
 import streamlit as st
-import pandas as pd
-from conexao import supabase, safe_query
+from conexao import supabase
 from modulos.financeiro import gerar_faturamento
 
 # =========================
-# ⚡ CACHE (PERFORMANCE)
+# 🎨 CSS PROFISSIONAL
+# =========================
+def css():
+    st.markdown("""
+    <style>
+
+    .box {
+        background: #020617;
+        padding: 18px;
+        border-radius: 12px;
+        border: 1px solid #1f2937;
+        margin-bottom: 15px;
+    }
+
+    .leito {
+        padding: 14px;
+        border-radius: 10px;
+        text-align: center;
+        color: white;
+        transition: 0.2s;
+        font-size: 14px;
+    }
+
+    .leito:hover {
+        transform: scale(1.05);
+    }
+
+    .livre { background: #16a34a; }
+    .ocupado { background: #dc2626; }
+    .limpeza { background: #f59e0b; }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# =========================
+# 📥 DADOS COMPLETOS
 # =========================
 @st.cache_data(ttl=5)
-def carregar_leitos():
+def carregar_tudo():
 
-    leitos_res = safe_query(lambda: supabase.table("leitos")
-                           .select("id, numero")
-                           .execute())
+    pacientes = supabase.table("pacientes").select("*").execute().data
+    leitos = supabase.table("leitos").select("*").execute().data
+    quartos = supabase.table("quartos").select("*").execute().data
+    internacoes = supabase.table("internacoes") \
+        .select("*").eq("status", "ativo").execute().data
 
-    internacoes_res = safe_query(lambda: supabase.table("internacoes")
-                                .select("leito_id, paciente_id")
-                                .eq("status", "ativo")
-                                .execute())
-
-    pacientes_res = safe_query(lambda: supabase.table("pacientes")
-                              .select("id, nome")
-                              .execute())
-
-    if not leitos_res or not leitos_res.data:
-        return pd.DataFrame()
-
-    leitos = leitos_res.data
-    internacoes = internacoes_res.data if internacoes_res else []
-    pacientes = pacientes_res.data if pacientes_res else []
-
-    pacientes_map = {p["id"]: p["nome"] for p in pacientes}
-    intern_map = {i["leito_id"]: i for i in internacoes}
-
-    for leito in leitos:
-        i = intern_map.get(leito["id"])
-
-        if i:
-            leito["status"] = "ocupado"
-            leito["paciente"] = pacientes_map.get(i["paciente_id"], "Desconhecido")
-        else:
-            leito["status"] = "livre"
-            leito["paciente"] = None
-
-    return pd.DataFrame(leitos)
-
-
-@st.cache_data(ttl=10)
-def carregar_pacientes():
-    res = safe_query(lambda: supabase.table("pacientes")
-                     .select("id, nome")
-                     .execute())
-
-    return pd.DataFrame(res.data or [])
+    return pacientes, leitos, quartos, internacoes
 
 
 # =========================
-# 👤 CADASTRO PACIENTE
+# 🧠 LEITO INTELIGENTE
 # =========================
-def cadastrar_paciente():
+def escolher_leito(leitos, internacoes, prioridade):
 
-    st.subheader("👤 Cadastro de Paciente")
+    ocupados = [i["leito_id"] for i in internacoes]
+    livres = [l for l in leitos if l["id"] not in ocupados]
 
-    nome = st.text_input("Nome")
-    cpf = st.text_input("CPF")
-    nascimento = st.date_input("Data de nascimento")
-    telefone = st.text_input("Telefone")
-
-    if st.button("Salvar paciente"):
-
-        if not nome:
-            st.warning("Nome obrigatório")
-            return
-
-        try:
-            supabase.table("pacientes").insert({
-                "nome": nome,
-                "cpf": cpf,
-                "data_nascimento": str(nascimento),
-                "telefone": telefone
-            }).execute()
-
-            st.success("Paciente cadastrado")
-            st.cache_data.clear()
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"Erro: {e}")
-
-
-# =========================
-# 🏥 INTERNAR
-# =========================
-def internar(paciente_id, leito_id):
-
-    supabase.table("internacoes").insert({
-        "paciente_id": paciente_id,
-        "leito_id": leito_id,
-        "status": "ativo"
-    }).execute()
-
-    st.cache_data.clear()
-
-
-# =========================
-# 🚪 ALTA
-# =========================
-def dar_alta(leito_id):
-
-    supabase.table("internacoes") \
-        .update({"status": "alta"}) \
-        .eq("leito_id", leito_id) \
-        .eq("status", "ativo") \
-        .execute()
-
-    st.cache_data.clear()
-
-
-# =========================
-# 🧠 ESCOLHA INTELIGENTE
-# =========================
-def escolher_leito(df, prioridade):
-
-    livres = df[df["status"] == "livre"]
-
-    if livres.empty:
+    if not livres:
         return None
 
     if prioridade == "Emergência":
-        return livres.iloc[0]
+        return livres[0]
 
     elif prioridade == "Urgente":
-        return livres.iloc[len(livres)//2]
+        return livres[len(livres)//2]
 
-    else:
-        return livres.iloc[-1]
+    return livres[-1]
 
 
 # =========================
-# 🗺️ MAPA DE LEITOS
+# 🏥 INTERNAR (COMPLETO)
 # =========================
-def mapa_leitos(df):
+def internar(paciente_id, prioridade, leitos, internacoes):
 
-    st.markdown("### 🗺️ Mapa de Leitos")
+    leito = escolher_leito(leitos, internacoes, prioridade)
 
-    col1, col2, col3 = st.columns(3)
+    if not leito:
+        return False
 
-    col1.metric("Total", len(df))
-    col2.metric("Ocupados", len(df[df["status"] == "ocupado"]))
-    col3.metric("Disponíveis", len(df[df["status"] == "livre"]))
+    # salva internação
+    supabase.table("internacoes").insert({
+        "paciente_id": paciente_id,
+        "leito_id": leito["id"],
+        "status": "ativo"
+    }).execute()
 
-    st.markdown("---")
+    # 💰 financeiro automático
+    valor = 500 if prioridade == "Eletivo" else 800 if prioridade == "Urgente" else 1200
 
-    cols = st.columns(6)
+    gerar_faturamento(paciente_id, "internacao", valor)
 
-    for i, row in df.iterrows():
+    # 🧾 cria prontuário automaticamente
+    supabase.table("prontuarios").insert({
+        "paciente_id": paciente_id,
+        "status": "aberto"
+    }).execute()
 
-        status = row["status"]
+    st.cache_data.clear()
+    return leito
 
-        cor = {
-            "livre": "#16a34a",
-            "ocupado": "#dc2626",
-            "limpeza": "#f59e0b"
-        }.get(status, "#374151")
 
-        with cols[i % 6]:
+# =========================
+# 🗺️ MAPA REAL HOSPITAL
+# =========================
+def mapa(leitos, quartos, internacoes, pacientes):
 
-            st.markdown(f"""
-            <div style="
-                background:{cor};
-                padding:15px;
-                border-radius:10px;
-                text-align:center;
-                color:white;
-            ">
-                <b>🛏️ {row['numero']}</b><br>
-                {status.upper()}<br>
-                <small>{row.get('paciente') or ''}</small>
-            </div>
-            """, unsafe_allow_html=True)
+    css()
 
-            if st.button("Selecionar", key=f"leito_{row['id']}"):
-                st.session_state.leito_sel = row.to_dict()
+    pacientes_map = {p["id"]: p["nome"] for p in pacientes}
+    intern_map = {i["leito_id"]: i for i in internacoes}
+    quartos_map = {q["id"]: q for q in quartos}
+
+    estrutura = {}
+
+    for l in leitos:
+
+        quarto = quartos_map.get(l["quarto_id"])
+        if not quarto:
+            continue
+
+        key = f"{quarto['setor']} | Quarto {quarto['numero']}"
+
+        if key not in estrutura:
+            estrutura[key] = []
+
+        intern = intern_map.get(l["id"])
+
+        estrutura[key].append({
+            "id": l["id"],
+            "numero": l["numero"],
+            "status": "ocupado" if intern else "livre",
+            "paciente": pacientes_map.get(intern["paciente_id"], "") if intern else ""
+        })
+
+    # render
+    for setor, leitos_lista in estrutura.items():
+
+        st.markdown(f"<div class='box'><b>{setor}</b>", unsafe_allow_html=True)
+
+        cols = st.columns(5)
+
+        for i, l in enumerate(leitos_lista):
+
+            with cols[i % 5]:
+
+                st.markdown(f"""
+                <div class="leito {l['status']}">
+                    🛏️ {l['numero']}<br>
+                    {l['status'].upper()}<br>
+                    <small>{l['paciente']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if st.button("Abrir", key=f"l_{l['id']}"):
+                    st.session_state.leito = l
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================
 # ⚙️ PAINEL DO LEITO
 # =========================
-def painel_leito():
+def painel():
 
-    leito = st.session_state.get("leito_sel")
+    leito = st.session_state.get("leito")
 
     if not leito:
         return
@@ -199,22 +179,19 @@ def painel_leito():
     if leito["status"] == "ocupado":
 
         if st.button("Dar alta"):
-            dar_alta(leito["id"])
+
+            supabase.table("internacoes") \
+                .update({"status": "alta"}) \
+                .eq("leito_id", leito["id"]) \
+                .eq("status", "ativo") \
+                .execute()
+
             st.success("Alta realizada")
+            st.cache_data.clear()
             st.rerun()
 
-    elif leito["status"] == "livre":
-        st.success("Leito disponível")
-
-    elif leito["status"] == "limpeza":
-
-        if st.button("Liberar"):
-            supabase.table("leitos").update({
-                "status": "livre"
-            }).eq("id", leito["id"]).execute()
-
-            st.success("Leito liberado")
-            st.rerun()
+    else:
+        st.success("Disponível")
 
 
 # =========================
@@ -222,53 +199,59 @@ def painel_leito():
 # =========================
 def tela():
 
-    st.title("🏥 Internação / Atendimento")
+    st.title("🏥 Internação Inteligente (Nível Hospital)")
 
-    df_leitos = carregar_leitos()
-    df_pacientes = carregar_pacientes()
+    pacientes, leitos, quartos, internacoes = carregar_tudo()
 
     aba1, aba2, aba3 = st.tabs([
-        "👤 Pacientes",
+        "👤 Paciente",
         "🩺 Atendimento",
-        "🗺️ Mapa de Leitos"
+        "🗺️ Mapa"
     ])
 
     # =========================
     # 👤 PACIENTE
     # =========================
     with aba1:
-        cadastrar_paciente()
+
+        nome = st.text_input("Nome do paciente")
+
+        if st.button("Cadastrar"):
+            supabase.table("pacientes").insert({"nome": nome}).execute()
+            st.success("Paciente cadastrado")
+            st.rerun()
 
     # =========================
     # 🩺 ATENDIMENTO
     # =========================
     with aba2:
 
-        if df_pacientes.empty:
-            st.warning("Cadastre um paciente")
+        if not pacientes:
+            st.warning("Cadastre paciente")
             return
 
-        paciente = st.selectbox("Paciente", df_pacientes["nome"])
-        paciente_id = df_pacientes[df_pacientes["nome"] == paciente]["id"].values[0]
+        nomes = [p["nome"] for p in pacientes]
+
+        paciente = st.selectbox("Paciente", nomes)
+
+        paciente_id = [p["id"] for p in pacientes if p["nome"] == paciente][0]
 
         tipo = st.radio("Tipo", ["Consulta", "Internação"])
 
-        # 🔥 CONSULTA
+        # 🔹 CONSULTA
         if tipo == "Consulta":
 
             if st.button("Registrar consulta"):
 
                 supabase.table("consultas").insert({
-                    "paciente_id": paciente_id,
-                    "status": "finalizado"
+                    "paciente_id": paciente_id
                 }).execute()
 
-                # 💰 FATURAMENTO
                 gerar_faturamento(paciente_id, "consulta", 150)
 
-                st.success("Consulta registrada + faturamento")
+                st.success("Consulta registrada")
 
-        # 🔥 INTERNAÇÃO
+        # 🔹 INTERNAÇÃO
         else:
 
             prioridade = st.selectbox(
@@ -276,27 +259,19 @@ def tela():
                 ["Eletivo", "Urgente", "Emergência"]
             )
 
-            if st.button("Internar automático"):
+            if st.button("Internar paciente"):
 
-                leito = escolher_leito(df_leitos, prioridade)
+                leito = internar(paciente_id, prioridade, leitos, internacoes)
 
-                if leito is None:
+                if not leito:
                     st.error("Sem leitos disponíveis")
-                    return
-
-                internar(paciente_id, leito["id"])
-
-                # 💰 VALOR DINÂMICO
-                valor = 500 if prioridade == "Eletivo" else 800 if prioridade == "Urgente" else 1200
-
-                gerar_faturamento(paciente_id, "internacao", valor)
-
-                st.success(f"Internado no leito {leito['numero']} + faturamento")
-                st.rerun()
+                else:
+                    st.success(f"Internado no leito {leito['numero']}")
+                    st.rerun()
 
     # =========================
-    # 🗺️ MAPA (POR ÚLTIMO)
+    # 🗺️ MAPA
     # =========================
     with aba3:
-        mapa_leitos(df_leitos)
-        painel_leito()
+        mapa(leitos, quartos, internacoes, pacientes)
+        painel()
