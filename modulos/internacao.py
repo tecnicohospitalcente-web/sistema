@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from conexao import supabase, safe_query
+from modulos.financeiro import gerar_faturamento
 
 # =========================
 # ⚡ CACHE (PERFORMANCE)
@@ -116,7 +117,7 @@ def dar_alta(leito_id):
 
 
 # =========================
-# 🧠 PRIORIDADE
+# 🧠 ESCOLHA INTELIGENTE
 # =========================
 def escolher_leito(df, prioridade):
 
@@ -183,7 +184,7 @@ def mapa_leitos(df):
 
 
 # =========================
-# ⚙️ PAINEL LEITO
+# ⚙️ PAINEL DO LEITO
 # =========================
 def painel_leito():
 
@@ -203,8 +204,7 @@ def painel_leito():
             st.rerun()
 
     elif leito["status"] == "livre":
-
-        st.success("Disponível")
+        st.success("Leito disponível")
 
     elif leito["status"] == "limpeza":
 
@@ -213,7 +213,7 @@ def painel_leito():
                 "status": "livre"
             }).eq("id", leito["id"]).execute()
 
-            st.success("Liberado")
+            st.success("Leito liberado")
             st.rerun()
 
 
@@ -233,11 +233,15 @@ def tela():
         "🗺️ Mapa de Leitos"
     ])
 
+    # =========================
     # 👤 PACIENTE
+    # =========================
     with aba1:
         cadastrar_paciente()
 
+    # =========================
     # 🩺 ATENDIMENTO
+    # =========================
     with aba2:
 
         if df_pacientes.empty:
@@ -249,6 +253,7 @@ def tela():
 
         tipo = st.radio("Tipo", ["Consulta", "Internação"])
 
+        # 🔥 CONSULTA
         if tipo == "Consulta":
 
             if st.button("Registrar consulta"):
@@ -258,8 +263,12 @@ def tela():
                     "status": "finalizado"
                 }).execute()
 
-                st.success("Consulta registrada")
+                # 💰 FATURAMENTO
+                gerar_faturamento(paciente_id, "consulta", 150)
 
+                st.success("Consulta registrada + faturamento")
+
+        # 🔥 INTERNAÇÃO
         else:
 
             prioridade = st.selectbox(
@@ -272,15 +281,22 @@ def tela():
                 leito = escolher_leito(df_leitos, prioridade)
 
                 if leito is None:
-                    st.error("Sem leitos")
+                    st.error("Sem leitos disponíveis")
                     return
 
                 internar(paciente_id, leito["id"])
 
-                st.success(f"Internado no leito {leito['numero']}")
+                # 💰 VALOR DINÂMICO
+                valor = 500 if prioridade == "Eletivo" else 800 if prioridade == "Urgente" else 1200
+
+                gerar_faturamento(paciente_id, "internacao", valor)
+
+                st.success(f"Internado no leito {leito['numero']} + faturamento")
                 st.rerun()
 
+    # =========================
     # 🗺️ MAPA (POR ÚLTIMO)
+    # =========================
     with aba3:
         mapa_leitos(df_leitos)
         painel_leito()
