@@ -3,124 +3,176 @@ import pandas as pd
 from conexao import supabase, safe_query
 
 # =========================
-# 💰 GERAR FATURAMENTO INTELIGENTE
+# 🧠 TRATAR RESPOSTA (ANTI ERRO)
 # =========================
-def gerar_faturamento(paciente_id, tipo, valor):
-
-    try:
-        supabase.table("contas_receber").insert({
-            "paciente_id": paciente_id,
-            "descricao": tipo,
-            "valor": valor,
-            "status": "pendente"
-        }).execute()
-
-    except Exception as e:
-        st.error(f"Erro faturamento: {e}")
+def tratar(res):
+    if res is None or not hasattr(res, "data"):
+        return []
+    return res.data or []
 
 
 # =========================
-# 📥 CARREGAR DADOS
+# 📥 DADOS
 # =========================
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=30)
 def carregar_receber():
-    res = (lambda: supabase.table("contas_receber")
-                     .select("*, pacientes(nome)")
-                     .execute())
-    return pd.DataFrame(res.data or [])
-
-
-@st.cache_data(ttl=5)
-def carregar_pagar():
-    res = (lambda: supabase.table("contas_pagar")
+    res = safe_query(lambda: supabase.table("contas_receber")
                      .select("*")
+                     .order("created_at", desc=True)
                      .execute())
-    return pd.DataFrame(res.data or [])
+    return pd.DataFrame(tratar(res))
+
+
+@st.cache_data(ttl=30)
+def carregar_pagar():
+    res = safe_query(lambda: supabase.table("contas_pagar")
+                     .select("*")
+                     .order("created_at", desc=True)
+                     .execute())
+    return pd.DataFrame(tratar(res))
+
+
+@st.cache_data(ttl=30)
+def carregar_pacientes():
+    res = safe_query(lambda: supabase.table("pacientes")
+                     .select("id,nome")
+                     .execute())
+    return tratar(res)
 
 
 # =========================
 # 💸 AÇÕES
 # =========================
-def pagar_conta(id):
-    supabase.table("contas_pagar").update({
-        "status": "pago"
-    }).eq("id", id).execute()
+def receber(id):
+    supabase.table("contas_receber") \
+        .update({"status": "recebido"}) \
+        .eq("id", id).execute()
 
     st.cache_data.clear()
+    st.rerun()
 
 
-def receber_conta(id):
-    supabase.table("contas_receber").update({
-        "status": "recebido"
-    }).eq("id", id).execute()
+def pagar(id):
+    supabase.table("contas_pagar") \
+        .update({"status": "pago"}) \
+        .eq("id", id).execute()
 
     st.cache_data.clear()
+    st.rerun()
 
 
 # =========================
-# 📦 REGISTRAR COMPRA (ESTOQUE/EMPRESA)
+# 🧾 RECEITA MANUAL
 # =========================
-def registrar_compra():
+def nova_receita(pacientes):
 
-    st.subheader("📦 Nova Despesa / Compra")
+    st.markdown("### ➕ Nova Receita")
+
+    nomes = ["Sem paciente"] + [p["nome"] for p in pacientes]
+    escolha = st.selectbox("Paciente", nomes)
 
     descricao = st.text_input("Descrição")
     valor = st.number_input("Valor", min_value=0.0)
-    tipo = st.selectbox("Tipo", ["Medicamento", "Equipamento", "Serviço", "Outros"])
 
-    if st.button("Salvar compra"):
+    if st.button("Salvar receita"):
 
         if not descricao or valor <= 0:
-            st.warning("Preencha os dados")
+            st.warning("Preencha corretamente")
             return
 
-        supabase.table("contas_pagar").insert({
-            "descricao": f"{tipo} - {descricao}",
+        paciente_id = None
+        if escolha != "Sem paciente":
+            paciente_id = next(p["id"] for p in pacientes if p["nome"] == escolha)
+
+        supabase.table("contas_receber").insert({
+            "paciente_id": paciente_id,
+            "descricao": descricao,
             "valor": valor,
             "status": "pendente"
         }).execute()
 
-        st.success("Compra registrada")
+        st.success("Receita salva")
         st.cache_data.clear()
         st.rerun()
 
 
 # =========================
-# 📥 RECEBER (COM PACIENTE)
+# 📦 DESPESA
+# =========================
+def nova_despesa():
+
+    st.markdown("### ➕ Nova Despesa")
+
+    descricao = st.text_input("Descrição despesa")
+    valor = st.number_input("Valor despesa", min_value=0.0)
+
+    if st.button("Salvar despesa"):
+
+        if not descricao or valor <= 0:
+            st.warning("Preencha corretamente")
+            return
+
+        supabase.table("contas_pagar").insert({
+            "descricao": descricao,
+            "valor": valor,
+            "status": "pendente"
+        }).execute()
+
+        st.success("Despesa salva")
+        st.cache_data.clear()
+        st.rerun()
+
+
+# =========================
+# 🔎 FILTROS
+# =========================
+def aplicar_filtros(df, pacientes, prefixo):
+
+    col1, col2, col3 = st.columns(3)
+
+    nomes = ["Todos"] + [p["nome"] for p in pacientes]
+
+    paciente_sel = col1.selectbox(
+        "Paciente",
+        nomes,
+        key=f"{prefixo}_paciente"
+    )
+
+    status_sel = col2.selectbox(
+        "Status",
+        ["Todos", "pendente", "recebido", "pago"],
+        key=f"{prefixo}_status"
+    )
+
+    data_ini = col3.date_input(
+        "Data início",
+        value=None,
+        key=f"{prefixo}_data"
+    )
+
+    if df.empty:
+        return df
+
+    if paciente_sel != "Todos":
+        pid = next(p["id"] for p in pacientes if p["nome"] == paciente_sel)
+        df = df[df["paciente_id"] == pid]
+
+    if status_sel != "Todos":
+        df = df[df["status"] == status_sel]
+
+    if data_ini and "created_at" in df.columns:
+        df["created_at"] = pd.to_datetime(df["created_at"])
+        df = df[df["created_at"] >= pd.to_datetime(data_ini)]
+
+    return df
+
+
+# =========================
+# 📥 TABELA RECEBER
 # =========================
 def tabela_receber(df):
 
-    st.subheader("📥 Contas a Receber")
-
-    if df.empty:
-        st.info("Sem dados")
-        return
-
-    for _, row in df.iterrows():
-
-        paciente = ""
-        if isinstance(row.get("pacientes"), dict):
-            paciente = row["pacientes"].get("nome", "")
-
-        col1, col2, col3, col4, col5 = st.columns([3,2,2,2,2])
-
-        col1.write(f"👤 {paciente}")
-        col2.write(row["descricao"])
-        col3.write(f"R$ {row['valor']:.2f}")
-        col4.write(row["status"])
-
-        if row["status"] != "recebido":
-            if col5.button("Receber", key=f"rec_{row['id']}"):
-                receber_conta(row["id"])
-                st.rerun()
-
-
-# =========================
-# 📤 PAGAR
-# =========================
-def tabela_pagar(df):
-
-    st.subheader("📤 Contas a Pagar")
+    st.markdown("### 📥 Receitas")
 
     if df.empty:
         st.info("Sem dados")
@@ -130,103 +182,65 @@ def tabela_pagar(df):
 
         col1, col2, col3, col4 = st.columns([3,2,2,2])
 
-        col1.write(row["descricao"])
-        col2.write(f"R$ {row['valor']:.2f}")
-        col3.write(row["status"])
+        col1.write(row.get("descricao", "-"))
+        col2.write(f"R$ {row.get('valor',0):.2f}")
+        col3.write(row.get("status", "-"))
 
-        if row["status"] != "pago":
-            if col4.button("Pagar", key=f"pag_{row['id']}"):
-                pagar_conta(row["id"])
-                st.rerun()
-
-
-# =========================
-# 📊 DASHBOARD FINANCEIRO REAL
-# =========================
-def dashboard(df_receber, df_pagar):
-
-    st.subheader("📊 Visão Geral Financeira")
-
-    total_receber = df_receber["valor"].sum() if not df_receber.empty else 0
-    total_pagar = df_pagar["valor"].sum() if not df_pagar.empty else 0
-
-    recebido = df_receber[df_receber["status"] == "recebido"]["valor"].sum() if not df_receber.empty else 0
-    pago = df_pagar[df_pagar["status"] == "pago"]["valor"].sum() if not df_pagar.empty else 0
-
-    saldo = recebido - pago
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("💰 Total Receber", f"R$ {total_receber:,.2f}")
-    col2.metric("💸 Total Pagar", f"R$ {total_pagar:,.2f}")
-    col3.metric("✅ Recebido", f"R$ {recebido:,.2f}")
-    col4.metric("🏦 Saldo Real", f"R$ {saldo:,.2f}")
-
-    st.markdown("---")
-
-    # 📊 GRÁFICO POR TIPO
-    if not df_receber.empty:
-
-        df_receber["tipo"] = df_receber["descricao"]
-
-        resumo = df_receber.groupby("tipo")["valor"].sum()
-
-        st.bar_chart(resumo)
+        if row.get("status") != "recebido":
+            if col4.button("Receber", key=f"r_{row['id']}"):
+                receber(row["id"])
 
 
 # =========================
-# 📈 RELATÓRIO COMPLETO
+# 📤 TABELA PAGAR
 # =========================
-def relatorio(df_receber, df_pagar):
-
-    st.subheader("📈 Relatório Completo")
-
-    lucro = (
-        df_receber[df_receber["status"] == "recebido"]["valor"].sum()
-        -
-        df_pagar[df_pagar["status"] == "pago"]["valor"].sum()
-    )
-
-    st.metric("Lucro / Prejuízo", f"R$ {lucro:,.2f}")
-
-    st.markdown("### 📥 Receitas")
-    st.dataframe(df_receber)
+def tabela_pagar(df):
 
     st.markdown("### 📤 Despesas")
-    st.dataframe(df_pagar)
+
+    if df.empty:
+        st.info("Sem dados")
+        return
+
+    for _, row in df.iterrows():
+
+        col1, col2, col3, col4 = st.columns([3,2,2,2])
+
+        col1.write(row.get("descricao", "-"))
+        col2.write(f"R$ {row.get('valor',0):.2f}")
+        col3.write(row.get("status", "-"))
+
+        if row.get("status") != "pago":
+            if col4.button("Pagar", key=f"p_{row['id']}"):
+                pagar(row["id"])
 
 
 # =========================
-# 🖥️ TELA PRINCIPAL
+# 🖥️ TELA
 # =========================
 def tela():
 
-    st.title("💰 Sistema Financeiro Hospitalar")
+    st.title("💰 Financeiro")
 
-    df_receber = carregar_receber()
-    df_pagar = carregar_pagar()
+    pacientes = carregar_pacientes()
+    df_r = carregar_receber()
+    df_p = carregar_pagar()
 
-    aba1, aba2, aba3, aba4 = st.tabs([
-        "📊 Dashboard",
+    aba1, aba2 = st.tabs([
         "📥 Receber",
-        "📤 Pagar",
-        "📈 Relatórios"
+        "📤 Pagar"
     ])
 
-    # 📊 DASHBOARD
+    # RECEBER
     with aba1:
-        dashboard(df_receber, df_pagar)
-
-    # 📥 RECEBER
-    with aba2:
-        tabela_receber(df_receber)
-
-    # 📤 PAGAR
-    with aba3:
-        registrar_compra()
+        nova_receita(pacientes)
         st.markdown("---")
-        tabela_pagar(df_pagar)
+        df_filtrado = aplicar_filtros(df_r, pacientes)
+        tabela_receber(df_filtrado)
 
-    # 📈 RELATÓRIO
-    with aba4:
-        relatorio(df_receber, df_pagar)
+    # PAGAR
+    with aba2:
+        nova_despesa()
+        st.markdown("---")
+        df_filtrado = aplicar_filtros(df_p, pacientes)
+        tabela_pagar(df_filtrado)
