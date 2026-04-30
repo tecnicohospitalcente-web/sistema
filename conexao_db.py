@@ -1,24 +1,24 @@
 import pandas as pd
 from conexao import supabase
 
+
 # =========================
-# 🔒 EXECUÇÃO SEGURA
+# 📥 EXECUTOR PADRÃO
 # =========================
 def executar(query_func):
     try:
         res = query_func()
-        if not res or not hasattr(res, "data"):
-            return []
-        return res.data
+        return getattr(res, "data", [])
     except Exception as e:
         print("Erro banco:", e)
         return []
 
 
 # =========================
-# 📥 SELECT → LISTA
+# 📥 SELECT
 # =========================
 def select(tabela, filtros=None, ordem=None):
+
     def run():
         q = supabase.table(tabela).select("*")
 

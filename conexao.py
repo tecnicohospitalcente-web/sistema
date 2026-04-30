@@ -14,7 +14,7 @@ supabase = get_supabase()
 
 
 # =========================
-# 🛡️ SAFE QUERY (ANTI ERRO)
+# 🛡️ SAFE QUERY (SEGURO)
 # =========================
 def safe_query(func, tentativas=3):
     for i in range(tentativas):
@@ -22,10 +22,5 @@ def safe_query(func, tentativas=3):
             return func()
         except Exception as e:
             print(f"Erro tentativa {i+1}: {e}")
-
-            try:
-                supabase.auth.get_user()
-            except:
-                pass
 
     return None
