@@ -3,20 +3,33 @@ import pandas as pd
 from conexao import supabase
 import plotly.express as px
 
+# =========================
+# 🧠 SAFE FETCH (ANTI ERRO)
+# =========================
+@st.cache_data(ttl=60)
+def safe_fetch(table):
+    try:
+        res = supabase.table(table).select("*").execute()
 
-def tela():
-    st.title("📊 Dashboard Geral Hospitalar")
-
-    # =========================
-    # 🔄 BUSCAR DADOS (SEGURO)
-    # =========================
-    def safe_fetch(table):
-        try:
-            res = supabase.table(table).select("*").execute()
-            return pd.DataFrame(getattr(res, "data", []))
-        except:
+        if res is None or not hasattr(res, "data"):
             return pd.DataFrame()
 
+        return pd.DataFrame(res.data or [])
+
+    except:
+        return pd.DataFrame()
+
+
+# =========================
+# 🖥️ TELA
+# =========================
+def tela():
+
+    st.title("📊 Dashboard Hospitalar")
+
+    # =========================
+    # 📥 DADOS
+    # =========================
     df_pagar = safe_fetch("contas_pagar")
     df_receber = safe_fetch("contas_receber")
     df_leitos = safe_fetch("leitos")
@@ -24,10 +37,10 @@ def tela():
     df_pacientes = safe_fetch("pacientes")
 
     # =========================
-    # 💰 FINANCEIRO (SEGURO)
+    # 💰 FINANCEIRO
     # =========================
-    total_pagar = df_pagar["valor"].sum() if "valor" in df_pagar.columns else 0
-    total_receber = df_receber["valor"].sum() if "valor" in df_receber.columns else 0
+    total_pagar = df_pagar["valor"].sum() if "valor" in df_pagar else 0
+    total_receber = df_receber["valor"].sum() if "valor" in df_receber else 0
     saldo = total_receber - total_pagar
 
     # =========================
@@ -36,11 +49,11 @@ def tela():
     total_leitos = len(df_leitos)
 
     ocupados = 0
-    if not df_internacoes.empty and "status" in df_internacoes.columns:
+    if not df_internacoes.empty and "status" in df_internacoes:
         ocupados = len(df_internacoes[df_internacoes["status"] == "ativo"])
 
     livres = total_leitos - ocupados
-    taxa_ocupacao = (ocupados / total_leitos * 100) if total_leitos > 0 else 0
+    taxa = (ocupados / total_leitos * 100) if total_leitos > 0 else 0
 
     # =========================
     # 👤 PACIENTES
@@ -54,43 +67,43 @@ def tela():
 
     col1.metric("💰 Saldo", f"R$ {saldo:,.2f}")
     col2.metric("🏥 Ocupação", f"{ocupados}/{total_leitos}")
-    col3.metric("📈 Taxa", f"{taxa_ocupacao:.1f}%")
+    col3.metric("📈 Taxa", f"{taxa:.1f}%")
     col4.metric("👤 Pacientes", total_pacientes)
 
     st.markdown("---")
 
     # =========================
-    # 📈 FINANCEIRO (GRÁFICO SEGURO)
+    # 📈 RECEITA x DESPESA
     # =========================
     st.subheader("💰 Receita x Despesa")
 
     if not df_receber.empty or not df_pagar.empty:
 
-        if not df_receber.empty:
+        df_list = []
+
+        if not df_receber.empty and "valor" in df_receber:
             df_receber["tipo"] = "Receita"
-        else:
-            df_receber = pd.DataFrame(columns=["valor", "tipo"])
+            df_list.append(df_receber)
 
-        if not df_pagar.empty:
+        if not df_pagar.empty and "valor" in df_pagar:
             df_pagar["tipo"] = "Despesa"
-        else:
-            df_pagar = pd.DataFrame(columns=["valor", "tipo"])
+            df_list.append(df_pagar)
 
-        df = pd.concat([df_receber, df_pagar], ignore_index=True)
+        if df_list:
+            df = pd.concat(df_list)
 
-        if "created_at" in df.columns:
-            df["data"] = pd.to_datetime(df["created_at"]).dt.date
-        else:
-            df["data"] = pd.Timestamp.today().date()
+            if "created_at" in df:
+                df["data"] = pd.to_datetime(df["created_at"], errors="coerce").dt.date
+            else:
+                df["data"] = pd.Timestamp.today().date()
 
-        if "valor" in df.columns:
             df_group = df.groupby(["data", "tipo"])["valor"].sum().reset_index()
 
             fig = px.line(df_group, x="data", y="valor", color="tipo")
             st.plotly_chart(fig, use_container_width=True)
 
     # =========================
-    # 🏥 LEITOS (PIE)
+    # 🏥 LEITOS
     # =========================
     st.subheader("🏥 Situação dos Leitos")
 
@@ -99,15 +112,16 @@ def tela():
         "Quantidade": [ocupados, livres]
     })
 
-    fig2 = px.pie(df_leitos_status, names="Status", values="Quantidade")
-    st.plotly_chart(fig2, use_container_width=True)
+    if not df_leitos_status.empty:
+        fig2 = px.pie(df_leitos_status, names="Status", values="Quantidade")
+        st.plotly_chart(fig2, use_container_width=True)
 
     # =========================
     # 🏥 FATURAMENTO
     # =========================
     st.subheader("🏥 Faturamento por Tipo")
 
-    if not df_receber.empty and "descricao" in df_receber.columns and "valor" in df_receber.columns:
+    if not df_receber.empty and "descricao" in df_receber and "valor" in df_receber:
 
         df_setor = df_receber.groupby("descricao")["valor"].sum().reset_index()
 
@@ -115,12 +129,14 @@ def tela():
         st.plotly_chart(fig3, use_container_width=True)
 
     # =========================
-    # 📋 TABELA
+    # 📋 ÚLTIMOS REGISTROS
     # =========================
     st.subheader("📋 Últimos Registros")
 
     if not df_receber.empty:
-        st.dataframe(df_receber.tail(10))
+        st.write("📥 Receitas")
+        st.dataframe(df_receber.tail(5))
 
     if not df_pagar.empty:
-        st.dataframe(df_pagar.tail(10))
+        st.write("📤 Despesas")
+        st.dataframe(df_pagar.tail(5))
