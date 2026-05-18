@@ -3,13 +3,22 @@ from conexao import supabase
 
 
 # =========================
+# 🧠 FUNÇÃO SEGURA
+# =========================
+def tratar(res):
+    if res is None or not hasattr(res, "data"):
+        return []
+    return res.data or []
+
+
+# =========================
 # 🎨 CSS
 # =========================
 def css():
     st.markdown("""
     <style>
 
-    .box {,
+    .box {
         background: #020617;
         padding: 15px;
         border-radius: 12px;
@@ -30,14 +39,14 @@ def css():
 
 
 # =========================
-# 👤 TOPO DO PACIENTE
+# 👤 TOPO
 # =========================
 def topo_paciente(p):
 
     st.markdown(f"""
     <div class="topo">
-        <h3>👤 {p['nome']}</h3>
-        <small>ID: {p['id']}</small>
+        <h3>👤 {p.get('nome','-')}</h3>
+        <small>ID: {p.get('id','-')}</small>
     </div>
     """, unsafe_allow_html=True)
 
@@ -49,9 +58,9 @@ def evolucao(paciente_id):
 
     st.subheader("📈 Evolução Médica")
 
-    texto = st.text_area("Descrever evolução")
+    texto = st.text_area("Descrever evolução", key="evo_txt")
 
-    if st.button("Salvar evolução"):
+    if st.button("Salvar evolução", key="btn_evo"):
 
         if not texto:
             st.warning("Digite algo")
@@ -66,18 +75,20 @@ def evolucao(paciente_id):
         st.success("Salvo")
         st.rerun()
 
-    dados = supabase.table("evolucoes") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .order("created_at", desc=True) \
-        .execute().data
+    dados = tratar(
+        supabase.table("evolucoes")
+        .select("*")
+        .eq("paciente_id", paciente_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
 
     for d in dados:
         st.markdown(f"""
         <div class="box">
-        <b>{d['profissional']}</b><br>
-        <small>{d['created_at']}</small>
-        <p>{d['descricao']}</p>
+        <b>{d.get('profissional','-')}</b><br>
+        <small>{d.get('created_at','')}</small>
+        <p>{d.get('descricao','')}</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -89,11 +100,11 @@ def prescricao(paciente_id):
 
     st.subheader("💊 Prescrição")
 
-    med = st.text_input("Medicamento")
-    dosagem = st.text_input("Dosagem")
-    freq = st.text_input("Frequência")
+    med = st.text_input("Medicamento", key="med")
+    dosagem = st.text_input("Dosagem", key="dos")
+    freq = st.text_input("Frequência", key="freq")
 
-    if st.button("Adicionar prescrição"):
+    if st.button("Adicionar", key="btn_presc"):
 
         supabase.table("prescricoes").insert({
             "paciente_id": paciente_id,
@@ -105,16 +116,18 @@ def prescricao(paciente_id):
         st.success("Adicionado")
         st.rerun()
 
-    dados = supabase.table("prescricoes") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .execute().data
+    dados = tratar(
+        supabase.table("prescricoes")
+        .select("*")
+        .eq("paciente_id", paciente_id)
+        .execute()
+    )
 
     for d in dados:
         st.markdown(f"""
         <div class="box">
-        <b>{d['medicamento']}</b><br>
-        {d['dosagem']} - {d['frequencia']}
+        <b>{d.get('medicamento','')}</b><br>
+        {d.get('dosagem','')} - {d.get('frequencia','')}
         </div>
         """, unsafe_allow_html=True)
 
@@ -126,10 +139,10 @@ def exames(paciente_id):
 
     st.subheader("🧪 Exames")
 
-    nome = st.text_input("Nome do exame")
-    resultado = st.text_area("Resultado")
+    nome = st.text_input("Nome exame", key="ex_nome")
+    resultado = st.text_area("Resultado", key="ex_res")
 
-    if st.button("Registrar exame"):
+    if st.button("Salvar exame", key="btn_exame"):
 
         supabase.table("exames").insert({
             "paciente_id": paciente_id,
@@ -138,61 +151,28 @@ def exames(paciente_id):
             "status": "finalizado"
         }).execute()
 
-        st.success("Exame registrado")
+        st.success("Salvo")
         st.rerun()
 
-    dados = supabase.table("exames") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .execute().data
+    dados = tratar(
+        supabase.table("exames")
+        .select("*")
+        .eq("paciente_id", paciente_id)
+        .execute()
+    )
 
     for d in dados:
         st.markdown(f"""
         <div class="box">
-        <b>{d['nome']}</b><br>
-        <small>{d['status']}</small>
-        <p>{d['resultado']}</p>
+        <b>{d.get('nome','')}</b><br>
+        <small>{d.get('status','')}</small>
+        <p>{d.get('resultado','')}</p>
         </div>
         """, unsafe_allow_html=True)
 
 
 # =========================
-# 📜 HISTÓRICO
-# =========================
-def historico(paciente_id):
-
-    st.subheader("📜 Histórico")
-
-    consultas = supabase.table("consultas") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .execute().data
-
-    internacoes = supabase.table("internacoes") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .execute().data
-
-    financeiro = supabase.table("financeiro") \
-        .select("*") \
-        .eq("paciente_id", paciente_id) \
-        .execute().data
-
-    st.markdown("#### 🩺 Consultas")
-    for c in consultas:
-        st.write(c)
-
-    st.markdown("#### 🏥 Internações")
-    for i in internacoes:
-        st.write(i)
-
-    st.markdown("#### 💰 Financeiro")
-    for f in financeiro:
-        st.write(f)
-
-
-# =========================
-# ⚡ AÇÕES CLÍNICAS
+# ⚡ AÇÕES
 # =========================
 def acoes(paciente):
 
@@ -200,48 +180,53 @@ def acoes(paciente):
 
     col1, col2 = st.columns(2)
 
-    # 🩺 CONSULTA
+    # CONSULTA
     with col1:
-        if st.button("🩺 Registrar consulta"):
+        if st.button("🩺 Consulta", key="btn_consulta"):
 
             supabase.table("consultas").insert({
                 "paciente_id": paciente["id"]
             }).execute()
 
-            
-
-            st.success("Consulta registrada + cobrança")
+            st.success("Consulta registrada")
             st.rerun()
 
-    # 🏥 INTERNAÇÃO
+    # INTERNAÇÃO
     with col2:
 
         prioridade = st.selectbox(
             "Prioridade",
-            ["Eletivo", "Urgente", "Emergência"]
+            ["Eletivo", "Urgente", "Emergência"],
+            key="prioridade"
         )
 
-        if st.button("🏥 Internar paciente"):
+        if st.button("🏥 Internar", key="btn_internar"):
 
-            leito = supabase.table("leitos") \
-                .select("id") \
-                .limit(1) \
-                .execute().data
+            leitos = tratar(
+                supabase.table("leitos")
+                .select("*")
+                .eq("status", "livre")
+                .limit(1)
+                .execute()
+            )
 
-            if not leito:
-                st.error("Sem leito")
+            if not leitos:
+                st.error("Sem leitos disponíveis")
                 return
+
+            leito = leitos[0]
 
             supabase.table("internacoes").insert({
                 "paciente_id": paciente["id"],
-                "leito_id": leito[0]["id"],
+                "leito_id": leito["id"],
                 "status": "ativo"
             }).execute()
 
-            valor = 500 if prioridade == "Eletivo" else 800 if prioridade == "Urgente" else 1200
+            supabase.table("leitos").update({
+                "status": "ocupado"
+            }).eq("id", leito["id"]).execute()
 
-            
-            st.success("Internado + faturamento")
+            st.success(f"Internado no leito {leito['id']}")
             st.rerun()
 
 
@@ -252,14 +237,22 @@ def tela():
 
     css()
 
-    st.title("🧾 Prontuário Eletrônico")
+    st.title("🧾 Prontuário")
 
-    # 🔥 PEGA DIRETO DA SESSÃO
     paciente = st.session_state.get("paciente_prontuario")
 
     if not paciente:
-        st.warning("Abra um paciente pelo módulo Pacientes")
+        st.warning("Abra um paciente primeiro")
         return
+
+    # 🔥 GARANTE QUE É DICT
+    if isinstance(paciente, int):
+        res = supabase.table("pacientes").select("*").eq("id", paciente).execute()
+        dados = tratar(res)
+        if not dados:
+            st.error("Paciente não encontrado")
+            return
+        paciente = dados[0]
 
     topo_paciente(paciente)
 
@@ -269,11 +262,10 @@ def tela():
 
     st.markdown("---")
 
-    aba1, aba2, aba3, aba4 = st.tabs([
+    aba1, aba2, aba3 = st.tabs([
         "📈 Evolução",
         "💊 Prescrição",
-        "🧪 Exames",
-        "📜 Histórico"
+        "🧪 Exames"
     ])
 
     with aba1:
@@ -284,6 +276,3 @@ def tela():
 
     with aba3:
         exames(paciente["id"])
-
-    with aba4:
-        historico(paciente["id"])
