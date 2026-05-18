@@ -235,12 +235,12 @@ def tela():
     with aba1:
         nova_receita(pacientes)
         st.markdown("---")
-        df_filtrado = aplicar_filtros(df_r, pacientes)
+        df_filtrado = aplicar_filtros(df_r, pacientes, "receber")
         tabela_receber(df_filtrado)
 
     # PAGAR
     with aba2:
         nova_despesa()
         st.markdown("---")
-        df_filtrado = aplicar_filtros(df_p, pacientes)
+        df_filtrado = aplicar_filtros(df_p, pacientes, "pagar")
         tabela_pagar(df_filtrado)

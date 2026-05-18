@@ -1,6 +1,6 @@
 import streamlit as st
 from conexao import supabase
-from modulos.financeiro import gerar_faturamento
+
 
 # =========================
 # 🎨 CSS
@@ -9,7 +9,7 @@ def css():
     st.markdown("""
     <style>
 
-    .box {
+    .box {,
         background: #020617;
         padding: 15px;
         border-radius: 12px;
@@ -208,7 +208,7 @@ def acoes(paciente):
                 "paciente_id": paciente["id"]
             }).execute()
 
-            gerar_faturamento(paciente["id"], "consulta", 150)
+            
 
             st.success("Consulta registrada + cobrança")
             st.rerun()
@@ -240,8 +240,7 @@ def acoes(paciente):
 
             valor = 500 if prioridade == "Eletivo" else 800 if prioridade == "Urgente" else 1200
 
-            gerar_faturamento(paciente["id"], "internacao", valor)
-
+            
             st.success("Internado + faturamento")
             st.rerun()
 

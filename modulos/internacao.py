@@ -1,6 +1,6 @@
 import streamlit as st
 from conexao import supabase
-from modulos.financeiro import gerar_faturamento
+
 
 # =========================
 # 🎨 CSS
@@ -92,7 +92,7 @@ def internar(paciente_id, leitos):
         "status": "aberto"
     }).execute()
 
-    gerar_faturamento(paciente_id, "internacao", 800)
+    
 
     st.cache_data.clear()
     return leito
